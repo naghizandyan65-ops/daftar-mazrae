@@ -410,13 +410,17 @@ function toast(msg){
 }
 
 /* ======================= STORAGE ======================= */
+/* Real browser storage (localStorage), namespaced so it never collides with
+   anything else that might live on the same domain. Works on any normal
+   website, installed PWA, and inside a WebView-based APK. */
 const KEYS = ['factories','tasks','workers','worklogs','deductions','settlements'];
+const STORAGE_PREFIX = 'daftar-mazrae:';
 
 async function loadAll(){
   for(const k of KEYS){
     try{
-      const res = await window.storage.get(k, false);
-      state[k] = res && res.value ? JSON.parse(res.value) : [];
+      const raw = localStorage.getItem(STORAGE_PREFIX + k);
+      state[k] = raw ? JSON.parse(raw) : [];
     }catch(e){
       state[k] = [];
     }
@@ -426,10 +430,9 @@ async function loadAll(){
 
 async function saveKey(k){
   try{
-    const res = await window.storage.set(k, JSON.stringify(state[k]), false);
-    if(!res) toast('ذخیره نشد. دوباره امتحان کن.');
+    localStorage.setItem(STORAGE_PREFIX + k, JSON.stringify(state[k]));
   }catch(e){
-    toast('خطا در ذخیره‌سازی.');
+    toast('حافظه مرورگر پر شده یا در دسترس نیست. یه فایل پشتیبان بگیر.');
   }
 }
 
@@ -1043,7 +1046,7 @@ function screenManage(){
       <button class="btn btn-ghost" data-action="trigger-import">${ICONS.upload} بازیابی از فایل</button>
     </div>
     <input type="file" id="import-file-input" accept="application/json,.json">
-    <div class="hint" style="text-align:center;margin-bottom:6px;">پیشنهاد می‌شه هر چند وقت یک‌بار از دکمه اول یک فایل پشتیبان بگیری و جایی جدا نگه داری.</div>
+    <div class="hint" style="text-align:center;margin-bottom:6px;">پیشنهاد می‌شه هر چند وقت یک‌بار از دکمه اول یک فایل پشتیبان بگیری و جایی جدا نگه داری. بازیابی هم پیش‌فرض به‌صورت امنه و چیزی از اطلاعات فعلی حذف نمی‌کنه.</div>
 
     <div class="section-label"><span>نصب روی گوشی</span><span class="ln"></span></div>
     <div class="tag-card" style="font-size:13px;color:var(--text-muted);line-height:2;">
@@ -1146,6 +1149,16 @@ function modalBody(){
       </div>
     `;
   }
+  if(m.type==='importChoice'){
+    return `
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">بازیابی از فایل پشتیبان<div class="close-x" data-action="close-modal">${ICONS.close}</div></div>
+      <div class="confirm-msg">این فایل چطور بازیابی بشه؟</div>
+      <button class="btn btn-amber btn-block" data-action="do-import-merge">${ICONS.upload} ترکیب با اطلاعات فعلی (پیشنهادی)</button>
+      <div class="hint" style="text-align:center;margin:8px 0 16px;">هرچی الان توی برنامه هست می‌مونه؛ فقط چیزهایی که کم بود از فایل پشتیبان اضافه میشه. هیچی حذف نمیشه.</div>
+      <button class="btn btn-ghost btn-block" data-action="do-import-replace">جایگزینی کامل (پاک کردن اطلاعات فعلی)</button>
+    `;
+  }
   return '';
 }
 
@@ -1240,6 +1253,13 @@ async function exportBackup(){
   toast('فایل پشتیبان دانلود شد');
 }
 
+function mergeArraysById(currentArr, backupArr){
+  const map = new Map();
+  currentArr.forEach(item=>map.set(item.id, item));
+  backupArr.forEach(item=>{ if(!map.has(item.id)) map.set(item.id, item); });
+  return [...map.values()];
+}
+
 function importBackupFile(file){
   const reader = new FileReader();
   reader.onload = () => {
@@ -1248,11 +1268,7 @@ function importBackupFile(file){
     catch(e){ toast('فایل معتبر نیست'); return; }
     const hasAll = KEYS.every(k=>Array.isArray(data[k]));
     if(!hasAll){ toast('ساختار فایل پشتیبان درست نیست'); return; }
-    openModal({type:'confirm', title:'بازیابی از فایل پشتیبان', message:'اطلاعات فعلی جایگزین محتوای این فایل پشتیبان میشه. مطمئنی؟', danger:true, confirmLabel:'بازیابی کن', onConfirm: async ()=>{
-      KEYS.forEach(k=>state[k]=data[k]);
-      await Promise.all(KEYS.map(saveKey));
-      toast('بازیابی انجام شد');
-    }});
+    openModal({type:'importChoice', data});
   };
   reader.onerror = () => toast('خطا در خواندن فایل');
   reader.readAsText(file);
@@ -1402,6 +1418,22 @@ document.addEventListener('click', async (e)=>{
     case 'print-report': window.print(); break;
     case 'export-backup': await exportBackup(); break;
     case 'trigger-import': document.getElementById('import-file-input').click(); break;
+    case 'do-import-merge': {
+      const data = state.modal.data;
+      KEYS.forEach(k=> state[k] = mergeArraysById(state[k], data[k]));
+      await Promise.all(KEYS.map(saveKey));
+      closeModal(); toast('ترکیب شد، چیزی حذف نشد'); render();
+      break;
+    }
+    case 'do-import-replace': {
+      const data = state.modal.data;
+      openModal({type:'confirm', title:'جایگزینی کامل', message:'همه اطلاعات فعلی پاک و با محتوای فایل پشتیبان جایگزین میشه. مطمئنی؟', danger:true, confirmLabel:'جایگزین کن', onConfirm: async ()=>{
+        KEYS.forEach(k=>state[k]=data[k]);
+        await Promise.all(KEYS.map(saveKey));
+        toast('جایگزین شد');
+      }});
+      break;
+    }
 
     case 'close-modal': closeModal(); break;
     case 'confirm-yes': {
