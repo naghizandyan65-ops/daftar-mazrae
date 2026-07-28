@@ -1,0 +1,17 @@
+{
+  "name": "دفتر مزرعه - حساب کارگران قارچ",
+  "short_name": "دفتر مزرعه",
+  "description": "ثبت کار روزانه، کسورات و تسویه حساب کارگران کارخانه قارچ",
+  "start_url": "./index.html",
+  "id": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#161410",
+  "theme_color": "#161410",
+  "dir": "rtl",
+  "lang": "fa",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
